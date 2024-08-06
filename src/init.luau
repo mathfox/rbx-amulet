@@ -871,17 +871,24 @@ local function server(options: ServerOptions): ServerSyncer
 		end
 
 		local interval = options.interval or 0
-		local currentTime = 0
-		local connection = RunService.Heartbeat:Connect(function(deltaTime)
-			currentTime += deltaTime
-			if currentTime >= interval then
-				currentTime = 0
-				onInterval()
-			end
-		end)
+		local connection: RBXScriptConnection | nil
+
+		if interval >= 0 then
+			local currentTime = 0
+
+			connection = RunService.Heartbeat:Connect(function(deltaTime)
+				currentTime += deltaTime
+				if currentTime >= interval then
+					currentTime = 0
+					onInterval()
+				end
+			end)
+		end
 
 		return function()
-			connection:Disconnect()
+			if connection then
+				connection:Disconnect()
+			end
 
 			for _, cleanup in cleanups do
 				cleanup()
