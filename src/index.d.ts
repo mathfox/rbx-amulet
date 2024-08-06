@@ -8,14 +8,6 @@
  */
 interface Atom<State> extends Molecule<State> {
 	/**
-	 * A function that depends on one or more atoms and produces a state.
-	 * Can be used to derive state from atoms.
-	 *
-	 * @returns The current state.
-	 */
-	(): State;
-
-	/**
 	 * @deprecated This property is not meant to be accessed directly.
 	 */
 	readonly __nominal: unique symbol;
@@ -26,6 +18,8 @@ interface Atom<State> extends Molecule<State> {
 	 */
 	(state: State | ((prev: State) => State)): void;
 }
+
+export type UnknownAtom = Atom<unknown>;
 
 /**
  * A function that depends on one or more atoms and produces a state. Can be
@@ -43,11 +37,11 @@ type StateOf<T> = T extends Molecule<infer State> ? State : never;
 /**
  * Recursively infers the type of the state produced by a map of molecules.
  */
-type StateOfMap<T> = {
+export type StateOfAtomMap<T> = {
 	[P in keyof T]: T[P] extends Molecule<infer State> ? State : never;
 };
 
-type AtomMap = Record<string, Atom<any>>;
+export type AtomMap = Record<string, UnknownAtom>;
 
 interface AtomOptions<State> {
 	/**
@@ -70,7 +64,8 @@ export declare function atom<State>(
 	options?: AtomOptions<State>,
 ): Atom<State>;
 
-type Cleanup = () => void;
+export type Cleanup = () => void;
+export type Procedure = () => void;
 
 type AnyMap<K, V> =
 	| Map<K, V>
@@ -92,8 +87,7 @@ export declare function subscribe<State>(
 
 /**
  * Creates a read-only atom that derives its state from one or more atoms.
- * Used to avoid unnecessary recomputations if multiple listeners depend on
- * the same molecule.
+ * Used to avoid unnecessary recomputations if multiple listeners depend on the same molecule.
  *
  * @param molecule The function that produces the state.
  * @param options Optional configuration.
@@ -111,7 +105,7 @@ export declare function computed<State>(
  * @param callback The function to run.
  * @returns A function that unsubscribes the callback.
  */
-export declare function effect(callback: () => Cleanup | void): Cleanup;
+export declare function effect(callback: (() => Cleanup) | Procedure): Cleanup;
 
 /**
  * Returns the result of the function without subscribing to changes. If a
@@ -121,7 +115,7 @@ export declare function effect(callback: () => Cleanup | void): Cleanup;
  * @param args Arguments to pass to the molecule.
  * @returns The current state.
  */
-export declare function peek<State, Args extends unknown[]>(
+export declare function peek<State, Args extends ReadonlyArray<unknown>>(
 	molecule: State | ((...args: Args) => State),
 	...args: Args
 ): State;
@@ -132,7 +126,7 @@ export declare function peek<State, Args extends unknown[]>(
  * @param value The value to check.
  * @returns `true` if the value is an atom, otherwise `false`.
  */
-export declare function isAtom(value: unknown): value is Atom<any>;
+export declare function isAtom(value: unknown): value is UnknownAtom;
 
 /**
  * Runs the given function and schedules listeners to be notified only once
@@ -140,18 +134,18 @@ export declare function isAtom(value: unknown): value is Atom<any>;
  *
  * @param callback The function to run.
  */
-export declare function batch(callback: () => void): void;
+export declare function batch(callback: Procedure): void;
 
 /**
- * Captures all atoms that are read during the function call and returns them
- * along with the result of the function. Useful for tracking dependencies.
+ * Captures all atoms that are read during the function call and returns them along with the result of the function.
+ * Useful for tracking dependencies.
  *
  * @param molecule The function to run.
  * @returns A tuple containing the captured atoms and the result of the function.
  */
 export declare function capture<State>(
 	molecule: Molecule<State>,
-): LuaTuple<[dependencies: Set<Atom<unknown>>, state: State]>;
+): LuaTuple<[dependencies: Set<UnknownAtom>, state: State]>;
 
 /**
  * Notifies all subscribers of the given atom that the state has changed.
@@ -162,15 +156,15 @@ export declare function notify<State>(atom: Atom<State>): void;
 
 /**
  * Creates an instance of `factory` for each item in the atom's state, and
- * cleans up the instance when the item is removed. Returns a cleanup function
- * that unsubscribes all instances.
+ * cleans up the instance when the item is removed.
+ * Returns a cleanup function that unsubscribes all instances.
  *
  * @param molecule The atom or molecule to observe.
  * @param factory The function that tracks the lifecycle of each item.
  * @returns A function that unsubscribes all instances.
  */
 export declare function observe<Item>(
-	molecule: Molecule<readonly Item[]>,
+	molecule: Molecule<ReadonlyArray<Item>>,
 	factory: (item: Item, index: number) => Cleanup | void,
 ): Cleanup;
 
@@ -190,7 +184,7 @@ export declare function observe<Key, Item>(
  * @returns A new atom with the mapped state.
  */
 export declare function mapped<V0, K1, V1>(
-	molecule: Molecule<readonly V0[]>,
+	molecule: Molecule<ReadonlyArray<V0>>,
 	mapper: (
 		value: V0,
 		index: number,
@@ -224,17 +218,16 @@ export declare function mapped<K0, V0, K1 = K0, V1 = V0>(
  */
 export declare function useAtom<State>(
 	molecule: Molecule<State>,
-	dependencies?: unknown[],
+	dependencies?: ReadonlyArray<unknown>,
 ): State;
 
 /**
  * Synchronizes state between the client and server. The server sends patches
  * to the client, which applies them to its local state.
  */
-declare const sync: {
+export declare const sync: {
 	/**
-	 * Creates a `ClientSyncer` object that receives patches from the server and
-	 * applies them to the local state.
+	 * Creates a `ClientSyncer` object that receives patches from the server and applies them to the local state.
 	 *
 	 * @client
 	 * @param options The atoms to synchronize with the server.
@@ -243,9 +236,9 @@ declare const sync: {
 	client: <Atoms extends AtomMap>(
 		options: ClientOptions<Atoms>,
 	) => ClientSyncer<Atoms>;
+
 	/**
-	 * Creates a `ServerSyncer` object that sends patches to the client and
-	 * hydrates the client's state.
+	 * Creates a `ServerSyncer` object that sends patches to the client and hydrates the client's state.
 	 *
 	 * @server
 	 * @param options The atoms to synchronize with the client.
@@ -254,9 +247,10 @@ declare const sync: {
 	server: <Atoms extends AtomMap>(
 		options: ServerOptions<Atoms>,
 	) => ServerSyncer<Atoms>;
+
 	/**
-	 * Checks whether a value is `None`. If `true`, the value is scheduled to be
-	 * removed from the state when the patch is applied.
+	 * Checks whether a value is `None`.
+	 * If `true`, the value is scheduled to be removed from the state when the patch is applied.
 	 *
 	 * @param value The value to check.
 	 * @returns `true` if the value is `None`, otherwise `false`.
@@ -311,8 +305,8 @@ type SyncPatch<State> =
  * state between the two.
  */
 export type SyncPayload<Atoms extends AtomMap> =
-	| { type: "init"; data: StateOfMap<Atoms> }
-	| { type: "patch"; data: SyncPatch<StateOfMap<Atoms>> };
+	| { type: "init"; data: StateOfAtomMap<Atoms> }
+	| { type: "patch"; data: SyncPatch<StateOfAtomMap<Atoms>> };
 
 export interface ClientOptions<Atoms extends AtomMap> {
 	/**
@@ -326,12 +320,14 @@ export interface ServerOptions<Atoms extends AtomMap> {
 	 * The atoms to synchronize with the client.
 	 */
 	atoms: Atoms;
+
 	/**
 	 * The interval at which to send patches to the client, in seconds.
-	 * Defaults to `0` (patches are sent up to once per frame). Set to a
-	 * negative value to disable automatic syncing.
+	 * Defaults to `0` (patches are sent up to once per frame).
+	 * Set to a negative value to disable automatic syncing.
 	 */
 	interval?: number;
+
 	/**
 	 * Whether the history of state changes since the client's last update
 	 * should be preserved. This is useful for values that change multiple times
@@ -351,7 +347,7 @@ export interface ClientSyncer<Atoms extends AtomMap> {
 	 *
 	 * @param payloads The patches or hydration payloads to apply.
 	 */
-	sync(...payloads: SyncPayload<Atoms>[]): void;
+	sync(...payloads: ReadonlyArray<SyncPayload<Atoms>>): void;
 }
 
 export interface ServerSyncer<Atoms extends AtomMap> {
@@ -367,8 +363,12 @@ export interface ServerSyncer<Atoms extends AtomMap> {
 	 * @returns A cleanup function that unsubscribes all listeners.
 	 */
 	connect(
-		callback: (player: Player, ...payloads: SyncPayload<Atoms>[]) => void,
+		callback: (
+			player: Player,
+			...payloads: ReadonlyArray<SyncPayload<Atoms>>
+		) => void,
 	): Cleanup;
+
 	/**
 	 * Hydrates the client's state with the server's state. This should be
 	 * called when a player joins the game and requires the server's state.
