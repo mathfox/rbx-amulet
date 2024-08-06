@@ -849,7 +849,7 @@ local function server(options: ServerOptions): ServerSyncer
 			local payloads: { SyncPayload } = {}
 			local lastSnapshot
 
-			for index, snapshot in next, snapshots do
+			for index, snapshot in snapshots do
 				lastSnapshot = snapshot
 
 				if index == 1 then
