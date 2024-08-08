@@ -5,28 +5,27 @@ local RunService = game:GetService("RunService")
 
 local WEAK_VALUES_METATABLE = { __mode = "v" } :: WeakValuesMetatable
 
-local ReactInstance: ModuleScript
 local React: any | nil
 
-do
+local function waitForReactInstance(): ModuleScript
 	local temp = script.Parent
 	assert(temp)
 
 	temp = temp.Parent
 	assert(temp)
 
-	temp = temp:FindFirstChild("ReactLua")
+	temp = temp:WaitForChild("ReactLua")
 	assert(temp)
 
-	temp = temp:FindFirstChild("React")
+	temp = temp:WaitForChild("React")
 	assert(temp and temp:IsA("ModuleScript"))
 
-	ReactInstance = temp
+	return temp
 end
 
 local function requireReact(): any
 	if not React then
-		React = require(ReactInstance) :: any
+		React = require(waitForReactInstance()) :: any
 	end
 	return React
 end
