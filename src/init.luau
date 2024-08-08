@@ -910,6 +910,7 @@ local function server(options: ServerOptions): ServerSyncer
 end
 
 local exports = {
+	atom = atom,
 	computed = computed,
 	effect = effect,
 	mapped = mapped,
