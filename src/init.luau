@@ -721,13 +721,17 @@ local function client(options: ClientOptions): ClientSyncer
 		for index = 1, select("#", ...) do
 			local payload = select(index, ...)
 
-			for key, state in payload.data do
-				if payload.type == "patch" then
-					atoms[key](apply(atoms[key](), state))
-				else
-					atoms[key](state)
+            batch(function()
+				for key, state in next, payload.data do
+					local atom = atoms[key]
+
+					if payload.type == "patch" then
+						atom(apply(atom(), state))
+					else
+						atom(state)
+					end
 				end
-			end
+			end)
 		end
 	end
 
