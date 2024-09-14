@@ -41,7 +41,7 @@ export type StateOfAtomMap<T> = {
 	[P in keyof T]: T[P] extends Molecule<infer State> ? State : never;
 };
 
-export type AtomMap = Record<string, UnknownAtom>;
+export type AtomMap = Record<string, Atom<any>>;
 
 interface AtomOptions<State> {
 	/**
@@ -59,10 +59,7 @@ interface AtomOptions<State> {
  * @param options Optional configuration.
  * @returns A new atom.
  */
-export declare function atom<State>(
-	state: State,
-	options?: AtomOptions<State>,
-): Atom<State>;
+export declare function atom<State>(state: State, options?: AtomOptions<State>): Atom<State>;
 
 export type Cleanup = () => void;
 export type Procedure = () => void;
@@ -93,10 +90,7 @@ export declare function subscribe<State>(
  * @param options Optional configuration.
  * @returns A new read-only atom.
  */
-export declare function computed<State>(
-	molecule: Molecule<State>,
-	options?: AtomOptions<State>,
-): Molecule<State>;
+export declare function computed<State>(molecule: Molecule<State>, options?: AtomOptions<State>): Molecule<State>;
 
 /**
  * Runs the given callback immediately and whenever any atom it depends on
@@ -185,10 +179,7 @@ export declare function observe<Key, Item>(
  */
 export declare function mapped<V0, K1, V1>(
 	molecule: Molecule<ReadonlyArray<V0>>,
-	mapper: (
-		value: V0,
-		index: number,
-	) => LuaTuple<[value: V1 | undefined, key: K1]>,
+	mapper: (value: V0, index: number) => LuaTuple<[value: V1 | undefined, key: K1]>,
 ): Molecule<ReadonlyMap<K1, V1>>;
 
 export declare function mapped<V0, V1>(
@@ -198,10 +189,7 @@ export declare function mapped<V0, V1>(
 
 export declare function mapped<K0, V0, K1 = K0, V1 = V0>(
 	molecule: Molecule<AnyMap<K0, V0>>,
-	mapper: (
-		value: V0,
-		key: K0,
-	) => LuaTuple<[value: V1 | undefined, key: K1]> | V1,
+	mapper: (value: V0, key: K0) => LuaTuple<[value: V1 | undefined, key: K1]> | V1,
 ): Molecule<ReadonlyMap<K1, V1>>;
 
 /**
@@ -216,10 +204,7 @@ export declare function mapped<K0, V0, K1 = K0, V1 = V0>(
  * @param dependencies An array of values that the subscription depends on.
  * @returns The current state.
  */
-export declare function useAtom<State>(
-	molecule: Molecule<State>,
-	dependencies?: ReadonlyArray<unknown>,
-): State;
+export declare function useAtom<State>(molecule: Molecule<State>, dependencies?: ReadonlyArray<unknown>): State;
 
 /**
  * Synchronizes state between the client and server. The server sends patches
@@ -233,9 +218,7 @@ export declare const sync: {
 	 * @param options The atoms to synchronize with the server.
 	 * @returns A `ClientSyncer` object.
 	 */
-	client: <Atoms extends AtomMap>(
-		options: ClientOptions<Atoms>,
-	) => ClientSyncer<Atoms>;
+	client: <Atoms extends AtomMap>(options: ClientOptions<Atoms>) => ClientSyncer<Atoms>;
 
 	/**
 	 * Creates a `ServerSyncer` object that sends patches to the client and hydrates the client's state.
@@ -244,9 +227,7 @@ export declare const sync: {
 	 * @param options The atoms to synchronize with the client.
 	 * @returns A `ServerSyncer` object.
 	 */
-	server: <Atoms extends AtomMap>(
-		options: ServerOptions<Atoms>,
-	) => ServerSyncer<Atoms>;
+	server: <Atoms extends AtomMap>(options: ServerOptions<Atoms>) => ServerSyncer<Atoms>;
 
 	/**
 	 * Checks whether a value is `None`.
@@ -269,9 +250,7 @@ export interface None {
 type MaybeNone<T> = undefined extends T ? None : never;
 
 type DataTypes = {
-	[P in keyof CheckableTypes as P extends keyof CheckablePrimitives
-		? never
-		: P]: CheckableTypes[P];
+	[P in keyof CheckableTypes as P extends keyof CheckablePrimitives ? never : P]: CheckableTypes[P];
 };
 
 /**
@@ -362,12 +341,7 @@ export interface ServerSyncer<Atoms extends AtomMap> {
 	 * @param callback The function to call when the state changes.
 	 * @returns A cleanup function that unsubscribes all listeners.
 	 */
-	connect(
-		callback: (
-			player: Player,
-			...payloads: ReadonlyArray<SyncPayload<Atoms>>
-		) => void,
-	): Cleanup;
+	connect(callback: (player: Player, ...payloads: ReadonlyArray<SyncPayload<Atoms>>) => void): Cleanup;
 
 	/**
 	 * Hydrates the client's state with the server's state. This should be

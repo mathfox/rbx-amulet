@@ -1,15 +1,19 @@
 {
 	"name": "@rbxts/amulet",
-	"version": "0.2.1",
+	"version": "0.3.0",
 	"description": "Atomic state management for Roblox",
-	"main": "src/init.lua",
+	"scripts": {
+		"check": "bunx @biomejs/biome check --write",
+		"prepublishOnly": "bun run check"
+	},
+	"main": "src/init.luau",
 	"types": "src/index.d.ts",
 	"files": ["src"],
+	"keywords": ["roblox", "roblox-ts", "state", "atom"],
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/mathfox/rbx-amulet.git"
 	},
-	"keywords": ["roblox", "roblox-ts", "state", "atom"],
 	"author": {
 		"name": "Ivan Leontev",
 		"url": "https://github.com/mathfox"
@@ -23,11 +27,9 @@
 		"access": "public"
 	},
 	"devDependencies": {
-		"roblox-ts": "^2.3.0-dev-8137656",
-		"typescript": "^5.6.0-dev.20240804"
-	},
-	"dependencies": {
-		"@rbxts/compiler-types": "2.3.0-types.2",
-		"@rbxts/types": "^1.0.799"
+		"roblox-ts": "^3.0.0-dev-834585a",
+		"typescript": "^5.7.0-dev.20240914",
+		"@rbxts/compiler-types": "^3.0.0-types.0",
+		"@rbxts/types": "^1.0.805"
 	}
 }
