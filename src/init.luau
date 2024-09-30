@@ -1,5 +1,7 @@
 --!strict
 --!native
+--!optimize 2
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
@@ -29,19 +31,6 @@ local function requireReact(): any
 	end
 	return React
 end
-
-export type Set<T> = { [T]: true }
-
-export type WeakKeysMetatable = {
-	__mode: "k",
-}
-
-export type WeakValuesMetatable = {
-	__mode: "v",
-}
-
-export type WeakKeys<K, V> = typeof(setmetatable({} :: { [K]: V }, (nil :: any) :: WeakKeysMetatable))
-export type WeakValues<K, V> = typeof(setmetatable({} :: { [K]: V }, (nil :: any) :: WeakValuesMetatable))
 
 --[=[
 	A primitive state container that can be read from and written to. When the
@@ -86,124 +75,6 @@ export type UnknownAtom = Atom<unknown>
 -- A function that does not accept anything and does not return anything.
 export type Procedure = () -> ()
 
-export type AtomProceduresMap = WeakValues<Procedure, unknown>
-
---[=[
-    A map from `atom` to `ProceduresMap`.
-    When there is no more reference to the `atom`, the entry is this map is gced.
-
-    The `ProceduresMap` is a map from `Procedure` to any value.
-]=]
-local listeners: WeakKeys<UnknownAtom, AtomProceduresMap> = setmetatable({}, { __mode = "k" } :: WeakKeysMetatable)
-
-local capturing: Set<Set<UnknownAtom>> = {}
-local batched: Set<Procedure> = {}
-
-local batching = false
-
---local function packResult(success: boolean, ...): (boolean, number, { unknown })
---	return success, select("#", ...), { ... }
---end
-
---[=[
-	Calls the given function and returns the result.
-    If the function yields or throws an error, the thread is closed and an error is thrown.
-    Regardless of the outcome, the `finally` function is called to clean up any resources.
-
-	@param callback The function to run.
-	@param finally Cleanup logic to run before error handling.
-	@param ... Arguments to pass to the callback.
-	@return ... The results of the callback.
-]=]
-local function try<T, U...>(callback: (U...) -> T | nil, finally: Procedure | nil, ...: U...): T
-	local thread = coroutine.create(callback)
-	--local success, resultCount, result = packResult(coroutine.resume(thread, ...))
-	local success, result = coroutine.resume(thread, ...)
-
-	if finally then
-		finally()
-	end
-
-	-- check whether the thread was yielded.
-	if coroutine.status(thread) ~= "dead" then
-		coroutine.close(thread)
-
-		local source, line, name = debug.info(callback, "sln")
-
-		error(
-			"Yielding is not allowed in atom functions. Consider wrapping this code in a Promise or task.defer instead."
-				.. `\nFunction defined at: {source}:{line}`
-				.. if name == "" then "" else ` function {name}`
-		)
-	elseif not success then
-		local source, line, name = debug.info(callback, "sln")
-
-		error(
-			"An error occurred while running an atom function"
-				.. `\nFunction defined at: {source}:{line}`
-				.. (if name == "" then "" else ` function {name}`)
-				.. `\nError: {result}`
-		)
-	end
-
-	-- TODO: Luau does not allow { unknown } type to be unpacked.
-	--return unpack(result :: { any }, 1, resultCount)
-
-	return result
-end
-
---[=[
-	Returns whether the given value is an atom.
-
-	@param value The value to check.
-	@return `true` if the value is an atom, otherwise `false`.
-]=]
-local function isAtom(value: unknown): boolean
-	-- TODO: cast value to proper type before indexing `listeners`.
-	return not not (value and listeners[value :: any])
-end
-
---[=[
-	Notifies all subscribers of the given atom that the state has changed.
-
-	@param atom The atom to notify.
-]=]
-local function notify(atom: UnknownAtom)
-	if batching then
-		for listener in (listeners[atom] :: any) :: { [Procedure]: unknown } do
-			batched[listener] = true
-		end
-
-		return
-	end
-
-	for listener in (table.clone(listeners[atom]) :: any) :: { [Procedure]: unknown } do
-		try(listener)
-	end
-end
-
---[=[
-	Captures all atoms that are read during the function call and returns them along with the result of the function.
-    Useful for tracking dependencies.
-
-	@param molecule The function to run.
-	@return A tuple containing the captured atoms and the result of the function.
-]=]
-local function capture<T>(molecule: Molecule<T>): (Set<UnknownAtom>, T)
-	if listeners[molecule] then
-		return { [molecule] = true }, molecule()
-	end
-
-	local dependencies: Set<UnknownAtom> = {}
-	capturing[dependencies] = true
-
-	local result = try(molecule, function()
-		capturing[dependencies] = nil
-	end)
-
-	return dependencies, result
-end
-
 --[=[
 	Runs the given function and schedules listeners to be notified only once after the function has completed.
     Useful for batching multiple changes.
@@ -226,37 +97,6 @@ local function batch(callback: Procedure)
 	end
 
 	table.clear(batched)
-end
-
---[=[
-	Returns the result of the function without subscribing to changes.
-    If a non-function value is provided, it is returned as is.
-
-	@param molecule The atom or molecule to get the state of.
-	@param args Arguments to pass to the molecule.
-	@return The current state.
-]=]
-local function peek<T, U...>(callback: ((U...) -> T) | T, ...: U...): T
-	if type(callback) ~= "function" then
-		return callback
-	end
-
-	-- check whether it's empty
-	if not next(capturing) then
-		return callback(...)
-	end
-
-	local snapshot = table.clone(capturing)
-
-	table.clear(capturing)
-
-	local result = try(callback, function()
-		for set in snapshot do
-			capturing[set] = true
-		end
-	end, ...)
-
-	return result
 end
 
 --[=[
@@ -285,80 +125,6 @@ local function disconnect(atoms: Set<UnknownAtom>, listener: Procedure)
 end
 
 --[=[
-	Creates a new atom with the given state.
-
-	@param state The initial state.
-	@param options Optional configuration.
-	@return A new atom.
-]=]
-local function atom<T>(state: T, options: AtomOptions<T> | nil): Atom<T>
-	local equals = if options then options.equals else nil
-
-	local function atom(...): T
-		if select("#", ...) == 0 then
-			for set in capturing do
-				set[atom] = true
-			end
-
-			return state
-		end
-
-		-- Here we are truncating the `...` varargs to just one value.
-		-- In this case we assume that this one value is atom mutator.
-		local nextState = peek(..., state)
-
-		if state ~= nextState and not (equals and equals(state, nextState)) then
-			state = nextState
-			notify(atom)
-		end
-
-		return state
-	end
-
-	listeners[atom] = setmetatable({}, WEAK_VALUES_METATABLE)
-
-	return atom
-end
-
---[=[
-	Subscribes to changes in the given atom or molecule.
-    The callback is called with the current state and the previous state immediately after a change occurs.
-
-	@param molecule The atom or molecule to subscribe to.
-	@param callback The function to call when the state changes.
-	@return A function that unsubscribes the callback.
-]=]
-local function subscribe<T>(molecule: Molecule<T>, callback: (state: T, prev: T) -> ()): Procedure
-	local dependencies, state = capture(molecule)
-	local disconnected = false
-
-	local function listener()
-		local prevState = state
-
-		disconnect(dependencies, listener)
-		dependencies, state = capture(molecule)
-
-		if not disconnected then
-			connect(dependencies, listener)
-		end
-
-		if state ~= prevState then
-			callback(state, prevState)
-		end
-	end
-
-	connect(dependencies, listener)
-
-	return function()
-		if not disconnected then
-			disconnected = true
-
-			disconnect(dependencies, listener)
-		end
-	end
-end
-
---[=[
 	A hook that subscribes to changes in the given atom or molecule.
     The component is re-rendered whenever the state changes.
 
@@ -382,44 +148,6 @@ local function useAtom<State>(molecule: Molecule<State>, dependencies: { unknown
 	end, dependencies or {})
 
 	return state
-end
-
---[=[
-	Runs the given callback immediately and whenever any atom it depends on changes.
-    Returns a cleanup function that unsubscribes the callback.
-
-	@param callback The function to run.
-	@return A function that unsubscribes the callback.
-]=]
-local function effect(callback: () -> Procedure | nil): Procedure
-	local dependencies, cleanup = capture(callback)
-	local disconnected = false
-
-	local function listener()
-		if cleanup then
-			cleanup()
-		end
-
-		disconnect(dependencies, listener)
-		dependencies, cleanup = capture(callback)
-
-		if not disconnected then
-			connect(dependencies, listener)
-		end
-	end
-
-	connect(dependencies, listener)
-
-	return function()
-		if not disconnected then
-			disconnected = true
-			disconnect(dependencies, listener)
-
-			if cleanup then
-				cleanup()
-			end
-		end
-	end
 end
 
 export type Map =
@@ -477,35 +205,6 @@ local function mapped<K0, V0, K1, V1>(molecule: Molecule<{ [K0]: V0 }>, mapper: 
 	return mappedAtom
 end
 
---[=[
-	Creates a read-only atom that derives its state from one or more atoms.
-	Used to avoid unnecessary recomputations if multiple listeners depend on the same molecule.
-
-	@param molecule The function that produces the state.
-	@param options Optional configuration.
-	@return A new read-only atom.
-]=]
-local function computed<T>(molecule: Molecule<T>, options: AtomOptions<T>?): Molecule<T>
-	local dependencies, state = capture(molecule)
-	local computedAtom = atom(state, options)
-	local computedRef = setmetatable({ current = computedAtom }, WEAK_VALUES_METATABLE)
-
-	local function listener()
-		local computedAtom = computedRef.current
-
-		if computedAtom then
-			disconnect(dependencies, listener)
-			dependencies, state = capture(molecule)
-			connect(dependencies, listener, computedAtom)
-			computedAtom(state)
-		end
-	end
-
-	connect(dependencies, listener, computedAtom)
-
-	return computedAtom
-end
-
 local function NOOP() end
 
 --[=[
@@ -549,7 +248,7 @@ local function observe<K, V>(molecule: Molecule<{ [K]: V }>, factory: (value: V,
 end
 
 local SAFE_KEYS = { string = true, number = true }
-local SAFE_VALUES = { string = true, number = true, boolean = true, table = true }
+local SAFE_VALUES = { string = true, number = true, boolean = true, table = true, userdata = true }
 
 local function isUnsafeTable(object: { [any]: any })
 	local keyType = nil
@@ -693,6 +392,12 @@ export type ClientOptions = {
 		The atoms to synchronize with the server.
 	]=]
 	atoms: { [string]: UnknownAtom },
+
+	--[=[
+		Whether to ignore patches sent before the client has been hydrated.
+		Default is `true`.
+	]=]
+	ignoreUnhydrated: boolean?,
 }
 
 export type ClientSyncer = {
@@ -714,14 +419,22 @@ export type ClientSyncer = {
 ]=]
 local function client(options: ClientOptions): ClientSyncer
 	local atoms = options.atoms
+	local ignoreUnhydrated = options.ignoreUnhydrated ~= false
 	local self = {} :: ClientSyncer
+	local hydrated = false
 
 	-- Apply the state changes sent by the server.
 	function self:sync(...)
 		for index = 1, select("#", ...) do
-			local payload = select(index, ...)
+			local payload: SyncPayload = select(index, ...)
+			if ignoreUnhydrated and payload.type == "patch" and not hydrated then
+				-- If the client is not initialized, ignore patches. This is
+				-- to prevent patching incomplete state.
+				continue
+			end
+			hydrated = true
 
-            batch(function()
+			batch(function()
 				for key, state in next, payload.data do
 					local atom = atoms[key]
 

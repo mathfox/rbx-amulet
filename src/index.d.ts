@@ -22,14 +22,6 @@ interface Atom<State> extends Molecule<State> {
 export type UnknownAtom = Atom<unknown>;
 
 /**
- * A function that depends on one or more atoms and produces a state. Can be
- * used to derive state from atoms.
- *
- * @returns The current state.
- */
-export type Molecule<State> = () => State;
-
-/**
  * Infers the type of the state produced by the given molecule.
  */
 type StateOf<T> = T extends Molecule<infer State> ? State : never;
@@ -43,14 +35,6 @@ export type StateOfAtomMap<T> = {
 
 export type AtomMap = Record<string, Atom<any>>;
 
-interface AtomOptions<State> {
-	/**
-	 * A function that determines whether the state has changed.
-	 * By default, a strict equality check (`===`) is used.
-	 */
-	equals?: (prev: State, next: State) => boolean;
-}
-
 /**
  * Creates a new atom with the given state.
  *
@@ -61,45 +45,12 @@ interface AtomOptions<State> {
  */
 export declare function atom<State>(state: State, options?: AtomOptions<State>): Atom<State>;
 
-export type Cleanup = () => void;
 export type Procedure = () => void;
 
 type AnyMap<K, V> =
 	| Map<K, V>
 	| ReadonlyMap<K, V>
 	| (K extends string | number | symbol ? { readonly [Key in K]: V } : never);
-
-/**
- * Subscribes to changes in the given atom or molecule.
- * The callback is called with the current state and the previous state immediately after a change occurs.
- *
- * @param molecule The atom or molecule to subscribe to.
- * @param callback The function to call when the state changes.
- * @returns A function that unsubscribes the callback.
- */
-export declare function subscribe<State>(
-	molecule: Molecule<State>,
-	callback: (state: State, prev: State) => void,
-): Cleanup;
-
-/**
- * Creates a read-only atom that derives its state from one or more atoms.
- * Used to avoid unnecessary recomputations if multiple listeners depend on the same molecule.
- *
- * @param molecule The function that produces the state.
- * @param options Optional configuration.
- * @returns A new read-only atom.
- */
-export declare function computed<State>(molecule: Molecule<State>, options?: AtomOptions<State>): Molecule<State>;
-
-/**
- * Runs the given callback immediately and whenever any atom it depends on
- * changes. Returns a cleanup function that unsubscribes the callback.
- *
- * @param callback The function to run.
- * @returns A function that unsubscribes the callback.
- */
-export declare function effect(callback: (() => Cleanup) | Procedure): Cleanup;
 
 /**
  * Returns the result of the function without subscribing to changes. If a
@@ -129,17 +80,6 @@ export declare function isAtom(value: unknown): value is UnknownAtom;
  * @param callback The function to run.
  */
 export declare function batch(callback: Procedure): void;
-
-/**
- * Captures all atoms that are read during the function call and returns them along with the result of the function.
- * Useful for tracking dependencies.
- *
- * @param molecule The function to run.
- * @returns A tuple containing the captured atoms and the result of the function.
- */
-export declare function capture<State>(
-	molecule: Molecule<State>,
-): LuaTuple<[dependencies: Set<UnknownAtom>, state: State]>;
 
 /**
  * Notifies all subscribers of the given atom that the state has changed.
@@ -292,6 +232,12 @@ export interface ClientOptions<Atoms extends AtomMap> {
 	 * The atoms to synchronize with the server.
 	 */
 	atoms: Atoms;
+
+	/**
+	 * Whether to ignore patches sent before the client has been hydrated.
+	 * Defaults to `true`.
+	 */
+	ignoreUnhydrated?: boolean;
 }
 
 export interface ServerOptions<Atoms extends AtomMap> {
